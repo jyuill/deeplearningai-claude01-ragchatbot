@@ -133,3 +133,7 @@ All configurable parameters are in `config.py`. Changes to chunk size, embedding
 
 ### ChromaDB Persistence
 The vector database persists to `./backend/chroma_db/` (gitignored). Delete this directory to force a complete rebuild of the vector store.
+- Always use descriptive variable names
+- always use uv to run the server do not use pip directly
+- always use uv to manage all dependencies
+- use uv to run python files
