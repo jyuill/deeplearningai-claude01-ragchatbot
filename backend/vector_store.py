@@ -107,9 +107,18 @@ class VectorStore:
                 n_results=1
             )
             
-            if results['documents'][0] and results['metadatas'][0]:
-                # Return the title (which is now the ID)
-                return results['metadatas'][0][0]['title']
+            if results['documents'][0] and results['metadatas'][0] and results['distances'][0]:
+                # Check if the match is reasonable (distance < 1.0 indicates good similarity)
+                distance = results['distances'][0][0]
+                course_title = results['metadatas'][0][0]['title']
+                
+                # If distance is too high, it's probably not a good match
+                if distance > 1.0:
+                    # Also check for simple substring match as fallback
+                    if course_name.lower() not in course_title.lower():
+                        return None
+                
+                return course_title
         except Exception as e:
             print(f"Error resolving course name: {e}")
         
@@ -141,21 +150,31 @@ class VectorStore:
         # Build lessons metadata and serialize as JSON string
         lessons_metadata = []
         for lesson in course.lessons:
-            lessons_metadata.append({
+            lesson_meta = {
                 "lesson_number": lesson.lesson_number,
                 "lesson_title": lesson.title,
-                "lesson_link": lesson.lesson_link
-            })
+            }
+            # Only add lesson_link if it's not None
+            if lesson.lesson_link is not None:
+                lesson_meta["lesson_link"] = lesson.lesson_link
+            lessons_metadata.append(lesson_meta)
+        
+        # Build course metadata, excluding None values
+        metadata = {
+            "title": course.title,
+            "lessons_json": json.dumps(lessons_metadata),  # Serialize as JSON string
+            "lesson_count": len(course.lessons)
+        }
+        
+        # Only add optional fields if they're not None
+        if course.instructor is not None:
+            metadata["instructor"] = course.instructor
+        if course.course_link is not None:
+            metadata["course_link"] = course.course_link
         
         self.course_catalog.add(
             documents=[course_text],
-            metadatas=[{
-                "title": course.title,
-                "instructor": course.instructor,
-                "course_link": course.course_link,
-                "lessons_json": json.dumps(lessons_metadata),  # Serialize as JSON string
-                "lesson_count": len(course.lessons)
-            }],
+            metadatas=[metadata],
             ids=[course.title]
         )
     
@@ -165,11 +184,16 @@ class VectorStore:
             return
         
         documents = [chunk.content for chunk in chunks]
-        metadatas = [{
-            "course_title": chunk.course_title,
-            "lesson_number": chunk.lesson_number,
-            "chunk_index": chunk.chunk_index
-        } for chunk in chunks]
+        metadatas = []
+        for chunk in chunks:
+            metadata = {
+                "course_title": chunk.course_title,
+                "chunk_index": chunk.chunk_index
+            }
+            # Only add lesson_number if it's not None
+            if chunk.lesson_number is not None:
+                metadata["lesson_number"] = chunk.lesson_number
+            metadatas.append(metadata)
         # Use title with chunk index for unique IDs
         ids = [f"{chunk.course_title.replace(' ', '_')}_{chunk.chunk_index}" for chunk in chunks]
         
